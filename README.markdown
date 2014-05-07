@@ -10,4 +10,10 @@ This is a simple GET API. Example:
   latest version string. Will return version string if link is not provided
 - `v%maj.%min.%pat%crap` (optional): output format for version string
 
-Demo server: https://github-latest.appspot.com
+Demo server: https://github-latest.appspot.com/gitlabhq/gitlabhq
+
+# Why?
+
+So you can dynamically link to your latest version on static sites (GitHub Pages, project README,
+etc.). Shameless plug: I'm using it on [ajmg-nw's README](https://github.com/nhanb/ajmg-nw) to link
+to the latest binary releases on Amazon S3.
