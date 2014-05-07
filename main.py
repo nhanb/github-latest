@@ -1,19 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright 2007 Google Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
 import webapp2
 import json
 import re
@@ -21,37 +6,48 @@ from google.appengine.api.urlfetch import fetch
 
 API_LINK = 'https://api.github.com/repos/%s/%s/tags'
 
-def latest_tag(tagnames):
+class Semver(object):
 
-    def dissemble(tag):
+    def __init__(self, version):
         match = re.match(r'^v?([0-9]+)\.([0-9]+)\.([0-9]+)-?([a-z0-9\.]*)$',
-                         tag, flags=re.IGNORECASE)
+                         version, flags=re.IGNORECASE)
         if match is None:
             raise Exception('malformed sematic version')
 
-        major = match.group(1)
-        minor = match.group(2)
-        patch = match.group(3)
-        # If crap after patch version (-rc.1, -alpha, etc.) is empty then bump
-        # it to something that is guaranteed to be "greater than" (>) any other
-        # possible crap string
-        crap = match.group(4) or 'zzzzzzzzzz'
-        return (major, minor, patch, crap)
+        self.major = match.group(1)
+        self.minor = match.group(2)
+        self.patch = match.group(3)
+        self.crap = match.group(4)
 
-    def compare(one, two):
-        one = dissemble(one)
-        two = dissemble(two)
-        length = len(one)
-        for i in range(length):
-            if one[i] > two[i]:
+    def __cmp__(self, other):
+        for attr in ['major', 'minor', 'patch']:
+            this = getattr(self, attr) or 'zzzzz'  # Make empty greate than
+            that = getattr(other, attr) or 'zzzzz' # non-empty crap
+            if this > that:
                 return 1
-            elif one[i] < two[i]:
+            elif this < that:
                 return -1
         return 0
 
+    def toString(self, format_str):
+        if not format_str:
+            format_str='%maj.%min.%pat%crap'
+        replaces = {
+            '%maj': self.major,
+            '%min': self.minor,
+            '%pat': self.patch,
+            '%crap': self.crap,
+        }
+        for before, after in replaces.iteritems():
+            format_str = format_str.replace(before, after)
+        return format_str
+
+
+def latest_tag(tagnames):
+    tagnames = [Semver(tag) for tag in tagnames]
     latest = tagnames.pop()
     for tag in tagnames:
-        if compare(tag, latest) > 0:
+        if tag > latest:
             latest = tag
     return latest
 
@@ -69,12 +65,15 @@ class MainHandler(webapp2.RequestHandler):
             taglist = json.loads(gh_resp.content)
             tagnames = [tag[u'name'] for tag in taglist]
             latest = latest_tag(tagnames)
-            self.response.write(latest)
+
+            format_str = self.request.get('format')
+            latest_str = latest.toString(format_str)
+            self.response.write(latest_str)
 
             # Redirect to download link
             destination = self.request.get('dest')
             if destination:
-                self.redirect(str(destination % latest))
+                self.redirect(str(destination % latest_str))
 
         except ValueError:
             self.response.write('invalid url')
